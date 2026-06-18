@@ -1,0 +1,45 @@
+// Integration check: spawn the built server over stdio, list tools, call a
+// local tool and a live tool. Run AFTER `npm run build`.
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+
+function assert(cond, msg) {
+  if (!cond) {
+    console.error("FAIL:", msg);
+    process.exit(1);
+  }
+  console.log("PASS:", msg);
+}
+
+const transport = new StdioClientTransport({ command: "node", args: ["build/index.js"] });
+const client = new Client({ name: "verify", version: "1.0.0" }, { capabilities: {} });
+await client.connect(transport);
+
+const { tools } = await client.listTools();
+assert(tools.length === 14, `expected 14 tools, got ${tools.length}`);
+assert(tools.some((t) => t.name === "get_literacy_rate"), "get_literacy_rate present");
+
+// Local CSV tool (no network)
+const list = await client.callTool({ name: "list_neighborhoods", arguments: {} });
+const listText = list.content[0].text;
+assert(listText.includes("36 bairros"), "list_neighborhoods mentions 36 bairros");
+assert(listText.includes("Pajuçara"), "list_neighborhoods includes a known bairro");
+
+// Local lookup by code
+const demo = await client.callTool({
+  name: "get_neighborhood_demographics",
+  arguments: { query: "2408102034" },
+});
+assert(demo.content[0].text.includes("Pajuçara"), "demographics resolves bairro by code");
+
+// Live API tool (requires network)
+try {
+  const pop = await client.callTool({ name: "get_total_population", arguments: {} });
+  console.log("LIVE get_total_population ->", pop.content[0].text.split("\n")[0]);
+  assert(pop.content[0].text.includes("751.300"), "live population matches 751.300");
+} catch (e) {
+  console.warn("WARN: live API check skipped (network?):", e.message);
+}
+
+await client.close();
+console.log("\nAll verification checks passed.");
