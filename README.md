@@ -58,15 +58,18 @@ Adicione a seguinte configuração no objeto `"mcpServers"`:
 
 ## Atualizar dados por bairro
 
-Os arquivos CSV em `data/` são gerados a partir de uma planilha pública do Google Sheets, utilizando o script de extração disponível no projeto:
+Os arquivos CSV em `data/` são gerados a partir de fontes públicas do IBGE, utilizando os scripts de extração disponíveis no projeto:
 
 ```bash
-python3 scripts/extract_natal_bairros.py
+python3 scripts/extract_natal_bairros.py   # população, domicílios e esgotamento por bairro
+python3 scripts/extract_natal_renda.py     # renda do responsável pelo domicílio por bairro
 ```
 
 > Requer Python 3 instalado na máquina.
 
-Como os dados são provenientes do **Censo 2022** (estáticos), não é necessário rodar o script novamente a menos que a planilha-fonte seja atualizada. Execute-o apenas quando houver uma nova versão dos dados de origem.
+Como os dados são provenientes do **Censo 2022** (estáticos), não é necessário rodar os scripts novamente a menos que as fontes sejam atualizadas. Execute-os apenas quando houver uma nova versão dos dados de origem.
+
+> **Sobre a renda por bairro:** o dado granular é o *rendimento do responsável pelo domicílio* (chefe), do release IBGE "Agregados por Setores Censitários — Rendimento do Responsável". É um universo **distinto** da tool municipal `get_average_income` (que cobre todas as pessoas de 14+ anos ocupadas), portanto os números por bairro não são diretamente comparáveis com o municipal.
 
 ---
 
@@ -84,10 +87,12 @@ Como os dados são provenientes do **Censo 2022** (estáticos), não é necessá
 | `get_density_area` | Área territorial (km²) e densidade demográfica (hab/km²). | Nenhum |
 | `get_city_sanitation` | Panorama do esgotamento sanitário do município. | Nenhum |
 | `get_literacy_rate` | Taxa de alfabetização das pessoas de 15+ anos (Censo 2022). | Nenhum |
-| `list_neighborhoods` | Lista os 36 bairros com população, área, densidade e moradores/dom. | Nenhum |
+| `list_neighborhoods` | Lista os 36 bairros com população, área, densidade, moradores/dom. e renda média do responsável. | Nenhum |
 | `get_neighborhood_demographics` | Demografia e ocupação de domicílios de um bairro. | `query` (nome ou código) |
 | `get_neighborhood_sanitation` | Detalhamento do esgotamento e % de adequação por bairro. | `query` (nome ou código) |
-| `compare_neighborhoods` | Tabelas comparativas lado a lado entre bairros. | `bairros` (array, mín. 2) |
+| `get_neighborhood_income` | Renda média e mediana mensal do responsável pelo domicílio em um bairro, com ranking (Censo 2022). | `query` (nome ou código) |
+| `rank_neighborhoods_by_income` | Ranqueia os bairros pela renda média do responsável (maiores ou menores). | `order` (`top`/`bottom`), `limit` |
+| `compare_neighborhoods` | Tabelas comparativas lado a lado entre bairros (demografia, saneamento e renda). | `bairros` (array, mín. 2) |
 
 ---
 
@@ -101,6 +106,9 @@ Depois de configurar o servidor MCP, você pode conversar com o assistente e faz
 - *"Quais os 3 bairros mais populosos de Natal e suas densidades?"*
 - *"Compare o saneamento (esgotamento adequado) entre Pajuçara e Lagoa Azul."*
 - *"Qual a média de moradores por domicílio no bairro Petrópolis?"*
+- *"Qual a renda do responsável pelo domicílio no bairro Tirol?"*
+- *"Quais os 5 bairros de Natal com menor renda do responsável?"*
+- *"Compare renda, saneamento e densidade entre Tirol e Guarapés."*
 
 ---
 
@@ -109,10 +117,12 @@ Depois de configurar o servidor MCP, você pode conversar com o assistente e faz
 ```
 ├── data/
 │   ├── bairros_natal.csv                  # Dados demográficos locais por bairro
-│   └── esgotamento_por_bairro_natal.csv   # Dados de esgoto locais por bairro
+│   ├── esgotamento_por_bairro_natal.csv   # Dados de esgoto locais por bairro
+│   └── renda_por_bairro_natal.csv         # Renda do responsável pelo domicílio por bairro
 ├── scripts/
-│   ├── extract_natal_bairros.py           # Script de extração dos dados da planilha
-│   └── verify.js                          # Script de verificação dos dados
+│   ├── extract_natal_bairros.py           # Extração de população/domicílios/esgoto por bairro
+│   ├── extract_natal_renda.py             # Extração da renda do responsável por bairro
+│   └── verify.js                          # Script de verificação da integração MCP
 ├── src/
 │   └── index.ts                           # Implementação principal do servidor MCP (TypeScript)
 ├── build/
