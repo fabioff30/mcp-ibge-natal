@@ -17,6 +17,7 @@ const __dirname = path.dirname(__filename);
 // Paths to CSV files (compiled JS is in build/, CSVs are in ../data/)
 const CSV_BAIRROS_PATH = path.resolve(__dirname, "..", "data", "bairros_natal.csv");
 const CSV_ESGOTAMENTO_PATH = path.resolve(__dirname, "..", "data", "esgotamento_por_bairro_natal.csv");
+const CSV_RENDA_PATH = path.resolve(__dirname, "..", "data", "renda_por_bairro_natal.csv");
 
 // Helper to parse CSV simply
 function parseCSV(filePath: string): Record<string, string>[] {
@@ -209,6 +210,38 @@ class NatalMcpServer {
                 },
               },
               required: ["bairros"],
+            },
+          },
+          {
+            name: "get_neighborhood_income",
+            description: "Obtém o rendimento nominal médio e mediano mensal do responsável pelo domicílio em um bairro específico de Natal (Censo 2022). Atenção: é a renda do responsável (chefe) do domicílio, universo distinto da renda municipal.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                query: {
+                  type: "string",
+                  description: "Nome do bairro ou código de 10 dígitos.",
+                },
+              },
+              required: ["query"],
+            },
+          },
+          {
+            name: "rank_neighborhoods_by_income",
+            description: "Ranqueia os bairros de Natal pela renda média mensal do responsável pelo domicílio (Censo 2022). Use order='top' para os mais ricos, 'bottom' para os mais pobres.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                order: {
+                  type: "string",
+                  enum: ["top", "bottom"],
+                  description: "top = maiores rendas, bottom = menores rendas. Padrão: top.",
+                },
+                limit: {
+                  type: "number",
+                  description: "Quantos bairros listar (1–36). Padrão: 10.",
+                },
+              },
             },
           },
         ],
@@ -468,18 +501,28 @@ class NatalMcpServer {
               };
             }
 
-            let mdTable = "| Código | Bairro | Área (km²) | População | Densidade (hab/km²) | Média Moradores/Dom. |\n| --- | --- | --- | --- | --- | --- |\n";
+            const rendaData = parseCSV(CSV_RENDA_PATH);
+            const rendaMap: Record<string, string> = {};
+            rendaData.forEach((r) => {
+              rendaMap[r.codigo_bairro] = r.rendimento_medio_responsavel;
+            });
+
+            let mdTable = "| Código | Bairro | Área (km²) | População | Densidade (hab/km²) | Média Moradores/Dom. | Renda média resp. (R$) |\n| --- | --- | --- | --- | --- | --- | --- |\n";
             bairros
               .sort((a, b) => Number(b.populacao_residente) - Number(a.populacao_residente))
               .forEach((b) => {
-                mdTable += `| ${b.codigo_bairro} | ${b.bairro} | ${Number(b.area_km2).toFixed(4)} | ${Number(b.populacao_residente).toLocaleString("pt-BR")} | ${Number(b.densidade_hab_km2).toFixed(2)} | ${b.media_moradores_domicilio} |\n`;
+                const rendaVal = rendaMap[b.codigo_bairro];
+                const rendaStr = rendaVal
+                  ? Number(rendaVal).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  : "—";
+                mdTable += `| ${b.codigo_bairro} | ${b.bairro} | ${Number(b.area_km2).toFixed(4)} | ${Number(b.populacao_residente).toLocaleString("pt-BR")} | ${Number(b.densidade_hab_km2).toFixed(2)} | ${b.media_moradores_domicilio} | ${rendaStr} |\n`;
               });
 
             return {
               content: [
                 {
                   type: "text",
-                  text: `### Lista de Bairros de Natal (Ordenada por População)\n\nEsta tabela lista os 36 bairros de Natal, que somam **751.300 habitantes** — total que coincide com a população do município no Censo 2022.\n\n${mdTable}\n\n*Fonte: Planilha Local com Dados Preprocessados do Censo 2022*`,
+                  text: `### Lista de Bairros de Natal (Ordenada por População)\n\nEsta tabela lista os 36 bairros de Natal, que somam **751.300 habitantes** — total que coincide com a população do município no Censo 2022.\n\n${mdTable}\n\n*Nota: "Renda média resp." é o rendimento nominal médio mensal do responsável pelo domicílio (Censo 2022) — universo distinto da renda de todos os trabalhadores de 14+ anos.*\n*Fonte: Planilha Local com Dados Preprocessados do Censo 2022*`,
                 },
               ],
             };
@@ -591,6 +634,7 @@ class NatalMcpServer {
 
             const bairrosData = parseCSV(CSV_BAIRROS_PATH);
             const esgotamentoData = parseCSV(CSV_ESGOTAMENTO_PATH);
+            const rendaData = parseCSV(CSV_RENDA_PATH);
 
             const results: any[] = [];
 
@@ -602,9 +646,10 @@ class NatalMcpServer {
               const esg = esgotamentoData.find(
                 (x) => x.codigo_bairro === qClean || x.bairro.toLowerCase().includes(qClean)
               );
+              const renda = b ? rendaData.find((x) => x.codigo_bairro === b.codigo_bairro) : undefined;
 
               if (b && esg) {
-                results.push({ b, esg });
+                results.push({ b, esg, renda });
               }
             }
 
@@ -622,6 +667,8 @@ class NatalMcpServer {
             mdDemographics += "| Média Moradores/Dom | " + results.map(r => r.b.media_moradores_domicilio).join(" | ") + " |\n";
             mdDemographics += "| Domicílios Totais | " + results.map(r => Number(r.b.domicilios_particulares_total).toLocaleString("pt-BR")).join(" | ") + " |\n";
             mdDemographics += "| % Domicílios Não-Ocupados | " + results.map(r => (Number(r.b.pct_nao_ocupados) * 100).toFixed(2) + "%").join(" | ") + " |\n";
+            mdDemographics += "| Renda média do responsável (R$) | " + results.map(r => r.renda ? Number(r.renda.rendimento_medio_responsavel).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—").join(" | ") + " |\n";
+            mdDemographics += "| Renda mediana do responsável (R$) | " + results.map(r => r.renda ? Number(r.renda.rendimento_mediano_responsavel).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—").join(" | ") + " |\n";
 
             let mdSanitation = "| Indicador de Saneamento | " + results.map(r => r.esg.bairro).join(" | ") + " |\n";
             mdSanitation += "| --- | " + results.map(() => "---").join(" | ") + " |\n";
@@ -637,8 +684,88 @@ class NatalMcpServer {
                   type: "text",
                   text: `### Tabela Comparativa de Bairros de Natal\n\n` +
                         `#### Comparativo Demográfico e Habitacional:\n\n${mdDemographics}\n\n` +
+                        `*Nota: "Renda do responsável" é o rendimento nominal mensal do responsável pelo domicílio (Censo 2022) — universo distinto da renda de todos os trabalhadores de 14+ anos.*\n\n` +
                         `#### Comparativo de Saneamento Básico (Esgotamento):\n\n${mdSanitation}\n\n` +
                         `*Fonte: Planilha Local / Censo Demográfico 2022*`,
+                },
+              ],
+            };
+          }
+
+          case "get_neighborhood_income": {
+            const query = (args as { query: string }).query.toLowerCase().trim();
+            const rendaData = parseCSV(CSV_RENDA_PATH);
+
+            const renda = rendaData.find(
+              (x) => x.codigo_bairro === query || x.bairro.toLowerCase().includes(query)
+            );
+
+            if (!renda) {
+              return {
+                content: [{ type: "text", text: `Bairro '${query}' não encontrado no banco de dados de renda. Use nomes como 'Abolição', 'Centro' ou 'Aeroporto'.` }],
+              };
+            }
+
+            const medio = Number(renda.rendimento_medio_responsavel);
+            const mediano = Number(renda.rendimento_mediano_responsavel);
+            const responsaveis = Number(renda.responsaveis);
+
+            // Calculate rank (1 = highest income)
+            const sorted = [...rendaData].sort((a, b) => Number(b.rendimento_medio_responsavel) - Number(a.rendimento_medio_responsavel));
+            const rank = sorted.findIndex((x) => x.codigo_bairro === renda.codigo_bairro) + 1;
+            const total = sorted.length;
+            const ordinal = rank === 1 ? "1º" : rank === 2 ? "2º" : rank === 3 ? "3º" : `${rank}º`;
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `### Rendimento do Responsável pelo Domicílio: Bairro **${renda.bairro}** (Censo 2022)\n\n` +
+                        `- **Renda média do responsável**: R$ ${medio.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n` +
+                        `- **Renda mediana do responsável**: R$ ${mediano.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n` +
+                        `- **Número de responsáveis pelo domicílio**: ${responsaveis.toLocaleString("pt-BR")}\n` +
+                        `- **Ranking em renda média**: **${ordinal} de ${total}** bairros de Natal\n\n` +
+                        `*Atenção: estes valores referem-se à renda do responsável (chefe) pelo domicílio — universo distinto da renda de todos os trabalhadores de 14+ anos usada na ferramenta get_average_income. Não são diretamente comparáveis.*\n\n` +
+                        `*Fonte: IBGE - Censo 2022 (Rendimento do Responsável)*`,
+                },
+              ],
+            };
+          }
+
+          case "rank_neighborhoods_by_income": {
+            const { order = "top", limit = 10 } = (args as { order?: string; limit?: number }) || {};
+            const clampedLimit = Math.max(1, Math.min(36, Math.round(limit)));
+            const rendaData = parseCSV(CSV_RENDA_PATH);
+
+            if (rendaData.length === 0) {
+              return {
+                content: [{ type: "text", text: "Erro: Não foi possível carregar os dados de renda por bairro." }],
+              };
+            }
+
+            const sorted = [...rendaData].sort((a, b) => {
+              const diff = Number(b.rendimento_medio_responsavel) - Number(a.rendimento_medio_responsavel);
+              return order === "bottom" ? -diff : diff;
+            });
+
+            const sliced = sorted.slice(0, clampedLimit);
+            const orderLabel = order === "bottom" ? "Menores Rendas" : "Maiores Rendas";
+
+            let mdTable = "| Posição | Bairro | Renda média (R$) | Renda mediana (R$) | Nº responsáveis |\n| --- | --- | --- | --- | --- |\n";
+            sliced.forEach((r, idx) => {
+              const medio = Number(r.rendimento_medio_responsavel).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              const mediano = Number(r.rendimento_mediano_responsavel).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              const resp = Number(r.responsaveis).toLocaleString("pt-BR");
+              mdTable += `| ${idx + 1}º | ${r.bairro} | R$ ${medio} | R$ ${mediano} | ${resp} |\n`;
+            });
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `### Ranking de Bairros de Natal por Renda do Responsável — ${orderLabel} (Censo 2022)\n\n${mdTable}\n\n` +
+                        `*Atenção: estes valores referem-se à renda do responsável (chefe) pelo domicílio — universo distinto da renda de todos os trabalhadores de 14+ anos. Não são diretamente comparáveis com a renda municipal.*\n\n` +
+                        `*Fonte: IBGE - Censo 2022 (Rendimento do Responsável)*`,
                 },
               ],
             };
