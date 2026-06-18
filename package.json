@@ -1,0 +1,25 @@
+{
+  "name": "mcp-ibge-natal",
+  "version": "1.0.0",
+  "description": "MCP Server to query live IBGE APIs and local Censo 2022 neighborhood data for Natal (RN)",
+  "main": "build/index.js",
+  "type": "module",
+  "bin": {
+    "mcp-ibge-natal": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "verify": "node scripts/verify.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "typescript": "^5.3.3"
+  },
+  "keywords": ["mcp", "ibge", "natal", "censo", "model-context-protocol"],
+  "author": "Fabio Farias Figueirôa",
+  "license": "MIT"
+}
