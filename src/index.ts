@@ -157,6 +157,11 @@ class NatalMcpServer {
             description: "Obtém o panorama geral de cobertura do esgotamento sanitário de Natal (Censo 2022).",
             inputSchema: { type: "object", properties: {} },
           },
+          {
+            name: "get_literacy_rate",
+            description: "Obtém a taxa de alfabetização das pessoas de 15 anos ou mais de idade em Natal (Censo 2022).",
+            inputSchema: { type: "object", properties: {} },
+          },
           // NEIGHBORHOODS (OFFLINE LOCAL DATA)
           {
             name: "list_neighborhoods",
@@ -435,6 +440,20 @@ class NatalMcpServer {
                 {
                   type: "text",
                   text: `### Cobertura de Esgotamento Sanitário em Natal (Censo 2022)\n\n${mdTable}\n\n- **Esgotamento Sanitário Adequado (Rede geral/pluvial/fossa ligada à rede)**: **${pctAdeq}%** de cobertura.\n\n*Fonte: IBGE - Censo Demográfico 2022 (Agregado 6805)*`,
+                },
+              ],
+            };
+          }
+
+          case "get_literacy_rate": {
+            const url = "https://servicodados.ibge.gov.br/api/v3/agregados/9543/periodos/2022/variaveis/2513?localidades=N6[2408102]";
+            const data = await fetchJson(url);
+            const val = Number(data[0]?.resultados[0]?.series[0]?.serie?.["2022"] || 0);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `**Taxa de Alfabetização de Natal (Censo 2022)**: ${val.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}% das pessoas de 15 anos ou mais de idade são alfabetizadas.\n\n*Fonte: IBGE - Censo Demográfico 2022 (Agregado 9543)*`,
                 },
               ],
             };
